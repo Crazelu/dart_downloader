@@ -23,6 +23,8 @@ import 'package:dart_downloader/dart_downloader.dart';
 
 ```dart
 final downloader = DartDownloader();
+
+//Download file from url
 downloader.download(url);
 
 //Listen to pause notifier to know if this download can be paused.
@@ -44,7 +46,7 @@ downloader.resume();
 //Cancel download
 downloader.cancel();
 
-//listen to download state
+//Listen to download state
 StreamBuilder<DownloadState>(
         stream: downloader.downloadState,
         builder: (context, snapshot) {
