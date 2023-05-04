@@ -31,6 +31,7 @@ class DartDownloader {
   bool _isCancelled = false;
   bool _canBuffer = false;
   bool _hasResumedDownload = false;
+  bool _deleteIfDownloadedFilePathExists = false;
   int _totalBytes = 0;
 
   ///Size of partially (if download is in progress)
@@ -127,6 +128,7 @@ class DartDownloader {
   ///If that will fail, pass a [fileName].
   Future<File?> download({
     required String url,
+    bool deleteIfDownloadedFilePathExists = false,
     String? path,
     String? fileName,
   }) async {
@@ -143,6 +145,7 @@ class DartDownloader {
       _path = path;
       _fileName = fileName;
       _downloadedBytesLength = 0;
+      _deleteIfDownloadedFilePathExists = deleteIfDownloadedFilePathExists;
 
       await _loadMetadata();
 
@@ -374,9 +377,13 @@ class DartDownloader {
             }
 
             if (await downloadedFile.exists()) {
-              throw DownloaderException(
-                message: "File at ${downloadedFile.path} already exists",
-              );
+              if (_deleteIfDownloadedFilePathExists) {
+                await downloadedFile.delete();
+              } else {
+                throw DownloaderException(
+                  message: "File at ${downloadedFile.path} already exists",
+                );
+              }
             }
 
             await downloadedFile.writeAsBytes(fileBytes);

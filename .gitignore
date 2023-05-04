@@ -4,3 +4,5 @@ pubspec.lock
 .dart_tool/
 .vscode/
 .DS_Store
+.flutter-plugins
+.flutter-plugins-dependencies
