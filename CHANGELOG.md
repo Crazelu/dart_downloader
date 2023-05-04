@@ -9,3 +9,7 @@
 ## 0.0.2+1
 
 * Trigger robust cancel event with cancel token in error handler to fix future not returning in some cases.
+
+## 0.0.3
+
+* Adds Cache to manage files saved to the cache directory. Adds option to retry failed downloads.

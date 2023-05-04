@@ -1,6 +1,6 @@
 name: dart_downloader
 description: A Dart library for downloading files from the internet with pause, resume and cancel features.
-version: 0.0.2+1
+version: 0.0.3
 homepage: https://github.com/Crazelu/dart_downloader
 
 environment:
