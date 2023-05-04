@@ -33,7 +33,10 @@ class DartDownloader {
   bool _canBuffer = false;
   bool _hasResumedDownload = false;
   bool _deleteIfDownloadedFilePathExists = false;
+  bool _canRetryDownload = false;
   int _totalBytes = 0;
+  int _maxRetries = 0;
+  int _retryCount = 0;
 
   ///Size of partially (if download is in progress)
   ///or fully (if download is complete) downloaded file.
@@ -133,9 +136,12 @@ class DartDownloader {
   ///
   ///[DartDownloader] will attempt to get the file name from the url.
   ///If that will fail, pass a [fileName].
+  ///[retries] is the maximum number of times download should be retried in
+  ///the event of download failures. If [retries] is `null`, no retries are allowed.
   Future<File?> download({
     required String url,
     bool deleteIfDownloadedFilePathExists = false,
+    int? retries,
     String? path,
     String? fileName,
   }) async {
@@ -144,6 +150,7 @@ class DartDownloader {
 
       if (_hasResumedDownload) {
         _isPaused = false;
+        _retryCount = 0;
         _handleDownload();
         return _downloadedFileCompleter.future;
       }
@@ -152,6 +159,9 @@ class DartDownloader {
       _path = path;
       _fileName = fileName;
       _downloadedBytesLength = 0;
+      _retryCount = 0;
+      _canRetryDownload = retries != null;
+      _maxRetries = retries ?? 0;
       _deleteIfDownloadedFilePathExists = deleteIfDownloadedFilePathExists;
 
       await _loadMetadata();
@@ -246,6 +256,14 @@ class DartDownloader {
           id: DateTime.now().toIso8601String(),
           isDownloadComplete: _downloadedBytesLength >= _totalBytes - 1,
         );
+      } else {
+        if (_canRetryDownload && _retryCount < _maxRetries) {
+          _logger.log("Retrying for $_getFileName -> ${_retryCount + 1}");
+          _retryCount++;
+          _handleDownload();
+        } else {
+          _cancelOrPauseToken.cancel();
+        }
       }
     } catch (e) {
       _logger.log("_handleDownload -> $e");
@@ -333,7 +351,13 @@ class DartDownloader {
         },
         onError: (e) {
           _logger.log("_downloadInRange StreamedResponse onError-> $e");
-          _handleError(e);
+
+          if (_canRetryDownload && _retryCount < _maxRetries) {
+            _downloadResponseStreamSub?.cancel();
+            // _logger.log("Skipping error. Going to retry");
+          } else {
+            _handleError(e);
+          }
         },
         cancelOnError: true,
       );
@@ -341,7 +365,13 @@ class DartDownloader {
       return bytesCompleter.future;
     } catch (e) {
       _logger.log("_downloadInRange -> $e");
-      _handleError(e);
+
+      if (_canRetryDownload && _retryCount < _maxRetries) {
+        _downloadResponseStreamSub?.cancel();
+        // _logger.log("Skipping error. Going to retry");
+      } else {
+        _handleError(e);
+      }
     }
     return Uint8List.fromList([]);
   }
@@ -407,7 +437,15 @@ class DartDownloader {
         },
         onError: (e) {
           _logger.log("_downloadEntireFile StreamedResponse onError-> $e");
-          _handleError(e);
+
+          if (_canRetryDownload && _retryCount < _maxRetries) {
+            // _logger.log("Retrying for $_getFileName -> ${_retryCount + 1}");
+            _downloadResponseStreamSub?.cancel();
+            _retryCount++;
+            _downloadEntireFile();
+          } else {
+            _handleError(e);
+          }
         },
         cancelOnError: true,
       );
@@ -415,7 +453,15 @@ class DartDownloader {
       return _downloadedFileCompleter.future;
     } catch (e) {
       _logger.log("_downloadEntireFile -> $e");
-      _handleError(e);
+
+      if (_canRetryDownload && _retryCount < _maxRetries) {
+        // _logger.log("Retrying for $_getFileName -> ${_retryCount + 1}");
+        _downloadResponseStreamSub?.cancel();
+        _retryCount++;
+        _downloadEntireFile();
+      } else {
+        _handleError(e);
+      }
     }
 
     return null;
