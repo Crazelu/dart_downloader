@@ -13,3 +13,7 @@
 ## 0.0.3
 
 * Adds Cache to manage files saved to the cache directory. Adds option to retry failed downloads.
+
+## 0.0.4
+
+* Adds connectivity listener to auto pause and resume downloads based on connection state

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dart_downloader/src/cache.dart';
 import 'package:dart_downloader/src/cancel_or_pause_token.dart';
 import 'package:dart_downloader/src/download_result.dart';
@@ -34,6 +35,7 @@ class DartDownloader {
   bool _hasResumedDownload = false;
   bool _deleteIfDownloadedFilePathExists = false;
   bool _canRetryDownload = false;
+  bool _pausedFromLostConnection = false;
   int _totalBytes = 0;
   int _maxRetries = 0;
   int _retryCount = 0;
@@ -59,6 +61,7 @@ class DartDownloader {
   ValueNotifier<bool> get canPauseNotifier => _canBufferNotifier;
 
   StreamSubscription<List<int>>? _downloadResponseStreamSub;
+  StreamSubscription<ConnectivityResult>? _connectivityStreamSub;
 
   ///Listener attached to [_downloadResultNotifier].
   void _downloadResultListener() {
@@ -69,6 +72,7 @@ class DartDownloader {
       if (!_isCancelled &&
           !_isPaused &&
           !_downloadedFileCompleter.isCompleted) {
+        _connectivityStreamSub?.cancel();
         if (_path == null) Cache.save(_fileName ?? _getFileName);
         _downloadedFileCompleter.complete(result.file);
         _downloadStateController.add(const Completed());
@@ -89,6 +93,7 @@ class DartDownloader {
       _downloadedFileCompleter.completeError(DownloadCancelException());
     }
     if (_cancelOrPauseToken.eventNotifier.value == Event.pause) {
+      if (!_pausedFromLostConnection) _connectivityStreamSub?.cancel();
       _downloadResponseStreamSub?.cancel();
       _hasResumedDownload = false;
       _isDownloading = false;
@@ -97,6 +102,35 @@ class DartDownloader {
       _downloadedFileCompleter.completeError(DownloadPauseException());
       _downloadedFileCompleter = Completer<File?>();
     }
+  }
+
+  ///Listens to changes in connectivity state and pauses downloads
+  ///when device is not connected to mobile or wifi network.
+  ///Resumes download when connection is back if [_pausedFromLostConnection] is true.
+  void _listenToConnectivityChanges() {
+    _connectivityStreamSub?.cancel();
+    _connectivityStreamSub = Connectivity().onConnectivityChanged.listen(
+      (result) {
+        _logger.log(result);
+        if (_isCancelled) return;
+        if ([ConnectivityResult.mobile, ConnectivityResult.wifi]
+            .contains(result)) {
+          if (_pausedFromLostConnection) {
+            _logger.log("_listenToConnectivityChanges -> Connection available");
+            _pausedFromLostConnection = false;
+            resume();
+          }
+        } else {
+          _logger.log(
+            "_listenToConnectivityChanges -> Connection lost and downloading -> $_isDownloading",
+          );
+          if (_isDownloading) {
+            _pausedFromLostConnection = true;
+            pause();
+          }
+        }
+      },
+    );
   }
 
   ///Downloaded file. This is null when download isn't complete.
@@ -147,6 +181,7 @@ class DartDownloader {
   }) async {
     try {
       _downloadResponseStreamSub?.cancel();
+      _listenToConnectivityChanges();
 
       if (_hasResumedDownload) {
         _isPaused = false;
@@ -165,6 +200,11 @@ class DartDownloader {
       _deleteIfDownloadedFilePathExists = deleteIfDownloadedFilePathExists;
 
       await _loadMetadata();
+
+      if (_totalBytes == 0) {
+        //unable to fetch metadata
+        throw DownloadCancelException();
+      }
 
       _handleDownload();
 
@@ -350,7 +390,16 @@ class DartDownloader {
           bytesCompleter.complete(Uint8List.fromList(fileBytes));
         },
         onError: (e) {
-          _logger.log("_downloadInRange StreamedResponse onError-> $e");
+          _logger.log(
+              "_downloadInRange StreamedResponse onError-> ${e.runtimeType} $e");
+
+          if (e is http.ClientException &&
+              e.message == "Connection closed while receiving data") {
+            _isDownloading = false;
+            _pausedFromLostConnection = true;
+            _cancelOrPauseToken.pause();
+            return;
+          }
 
           if (_canRetryDownload && _retryCount < _maxRetries) {
             _downloadResponseStreamSub?.cancel();
@@ -482,17 +531,22 @@ class DartDownloader {
   ///Loads file metadata including file size in bytes and flag for whether
   ///buffered download is possible.
   Future<void> _loadMetadata() async {
-    final response = await http.head(Uri.parse(_url));
-    final headers = response.headers;
+    try {
+      final response = await http.head(Uri.parse(_url));
+      final headers = response.headers;
 
-    _canBuffer = headers["accept-ranges"] == "bytes";
-    _totalBytes = int.parse(headers["content-length"] ?? "0");
+      _canBuffer = headers["accept-ranges"] == "bytes";
+      _totalBytes = int.parse(headers["content-length"] ?? "0");
 
-    if (!_fileSizeCompleter.isCompleted) {
-      _fileSizeCompleter.complete(_totalBytes);
+      if (!_fileSizeCompleter.isCompleted) {
+        _fileSizeCompleter.complete(_totalBytes);
+      }
+
+      _canBufferNotifier.value = _canBuffer;
+    } catch (e) {
+      _logger.log("_loadMetadata -> $e");
+      _handleError(e);
     }
-
-    _canBufferNotifier.value = _canBuffer;
   }
 
   ///Pauses download.
@@ -540,6 +594,7 @@ class DartDownloader {
 
   ///Releases resources.
   void dispose() {
+    _connectivityStreamSub?.cancel();
     _downloadResponseStreamSub?.cancel();
     _cancelOrPauseToken.eventNotifier.removeListener(_tokenEventListener);
     _downloadResultNotifier.removeListener(_downloadResultListener);
