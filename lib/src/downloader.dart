@@ -418,7 +418,7 @@ class DartDownloader {
     Object error, {
     bool rethrowOnlyOwnedException = true,
   }) {
-    _downloadStateController.add(const Cancelled());
+    _cancelOrPauseToken.cancel();
     if (rethrowOnlyOwnedException && error is DownloaderException) {
       throw error;
     } else if (!rethrowOnlyOwnedException) {
