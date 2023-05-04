@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dart_downloader/src/cache.dart';
 import 'package:dart_downloader/src/cancel_or_pause_token.dart';
 import 'package:dart_downloader/src/download_result.dart';
 import 'package:dart_downloader/src/exception.dart';
@@ -24,7 +25,7 @@ class DartDownloader {
 
   static final _logger = Logger(DartDownloader);
 
-  static const _cacheDirectory = "cacheDirectory";
+  static const _cacheDirectory = Cache.cacheDirectory;
 
   bool _isDownloading = false;
   bool _isPaused = false;
@@ -65,6 +66,7 @@ class DartDownloader {
       if (!_isCancelled &&
           !_isPaused &&
           !_downloadedFileCompleter.isCompleted) {
+        if (_path == null) Cache.save(_fileName ?? _getFileName);
         _downloadedFileCompleter.complete(result.file);
         _downloadStateController.add(const Completed());
       }
@@ -121,6 +123,11 @@ class DartDownloader {
     _logger.disableLogs();
   }
 
+  ///Deletes all files in [Cache.cacheDirectory].
+  static Future<void> clearCache() async {
+    return Cache.clearCache();
+  }
+
   ///Downloads a file from [url].
   ///If [path] is specified, the downloaded file is saved there.
   ///
@@ -169,7 +176,7 @@ class DartDownloader {
     try {
       return _url.split('/').last;
     } catch (e) {
-      return DateTime.now().toIso8601String();
+      return "";
     }
   }
 
