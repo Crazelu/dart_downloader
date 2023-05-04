@@ -79,7 +79,7 @@ StreamBuilder<DownloadState>(
 - [x] Cancel downloads
 - [x] Download state stream (downloading, paused, cancelled, completed)
 - [x] Download progress stream (raw bytes and formatted string)
-- [ ] Retries
+- [x] Retries
 - [ ] Connectivity listener to pause downloads when internet connection is lost and resume when connection is regained.
 
 ## Contributions 🫱🏾‍🫲🏼
