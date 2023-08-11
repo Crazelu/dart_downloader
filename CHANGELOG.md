@@ -17,3 +17,7 @@
 ## 0.0.4
 
 * Adds connectivity listener to auto pause and resume downloads based on connection state
+
+## 0.0.5
+
+* Bumps http dependency version and Dart SDK constraints

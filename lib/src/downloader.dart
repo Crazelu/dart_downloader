@@ -244,7 +244,7 @@ class DartDownloader {
   }
 
   ///Downloads with ranges if buffering is supported.
-  ///Otherwise, the entire audio content is downloaded once.
+  ///Otherwise, the entire file is downloaded once.
   Future<void> _handleDownload() async {
     try {
       final fileName = _fileName ?? _getFileName;
